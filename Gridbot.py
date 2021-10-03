@@ -8,9 +8,13 @@ import ShiojiLogin
 api=ShiojiLogin.api
 
 import datetime
+g_upperid='0052'
+g_lowerid='00662'
+### 之後改成 money(init)=target_assset-uppershare*upperprice-lowershare*lowerprice
+target_assset=0
 class GridBot:
-    upperid='006208'
-    lowerid='00646'
+    upperid=g_upperid
+    lowerid=g_lowerid
     upperprice=0
     uppershare=0
     lowerprice=0
@@ -20,11 +24,11 @@ class GridBot:
     MA=0
     money=0
 
-    parameters={'BiasUpperLimit':1.1,\
+    parameters={'BiasUpperLimit':1.2,\
                  'UpperLimitPosition':0.1,\
                  'BiasLowerLimit':0.9,\
                  'LowerLimitPosition':0.9,\
-                 'BiasPeriod':50}
+                 'BiasPeriod':30}
     
     year=0
     month=0
@@ -77,6 +81,10 @@ class GridBot:
     def sendOrders(self):
         quantityUpper=self.uppershareTarget-self.uppershare
         quantityLower=self.lowershareTarget-self.lowershare
+        quantityUpper=min(quantityUpper,999)
+        quantityUpper=max(quantityUpper,-999)
+        quantityLower=min(quantityLower,999)
+        quantityLower=max(quantityLower,-999)
         
         code=self.upperid
         money=self.money
@@ -112,7 +120,7 @@ class GridBot:
             cost=stockBid[code]*quantityUpper
             if(quantityUpper>0):
                 if(money>cost):
-                    money=money-cost
+                    money=money-cost #local money int
                     trade = api.place_order(contract, order)
             else:
                 trade = api.place_order(contract, order)
@@ -252,20 +260,20 @@ bot1=GridBot(uppershare=0,lowershare=0,money=10000)
 import threading, time
 from threading import Thread, Lock
 
-mutexDict ={'006208':Lock(),'00646':Lock()}
-mutexBidAskDict ={'006208':Lock(),'00646':Lock()}
-subscribeStockList=['006208','00646']
+mutexDict ={g_upperid:Lock(),g_lowerid:Lock()}
+mutexBidAskDict ={g_upperid:Lock(),g_lowerid:Lock()}
+subscribeStockList=[g_upperid,g_lowerid]
 snapshots={}
-snapshots['006208'] = api.snapshots([api.Contracts.Stocks['006208']])
-snapshots['00646'] = api.snapshots([api.Contracts.Stocks['00646']])
+snapshots[g_upperid] = api.snapshots([api.Contracts.Stocks[g_upperid]])
+snapshots[g_lowerid] = api.snapshots([api.Contracts.Stocks[g_lowerid]])
 
 #抓取創建BOT當下的價格當作預設值
-stockPrice={'006208':snapshots['006208'][0]['close'],\
-            '00646' :snapshots['00646'][0]['close']}
-stockBid={'006208':snapshots['006208'][0]['close'],\
-            '00646' :snapshots['00646'][0]['close']}
-stockAsk={'006208':snapshots['006208'][0]['close'],\
-            '00646' :snapshots['00646'][0]['close']}
+stockPrice={g_upperid:snapshots[g_upperid][0]['close'],\
+            g_lowerid:snapshots[g_lowerid][0]['close']}
+stockBid={g_upperid:snapshots[g_upperid][0]['close'],\
+          g_lowerid:snapshots[g_lowerid][0]['close']}
+stockAsk={g_upperid:snapshots[g_upperid][0]['close'],\
+          g_lowerid:snapshots[g_lowerid][0]['close']}
 
 
 def jobs_per1min():
@@ -273,22 +281,22 @@ def jobs_per1min():
         bot1.UpdateMA()
         print('UpdateMA Done')
         #get price 
-        mutexDict['006208'].acquire()
-        mutexDict['00646'].acquire()
-        mutexBidAskDict['006208'].acquire()
-        mutexBidAskDict['00646'].acquire()
-        if(stockPrice['006208']>stockAsk['006208'] or stockPrice['006208']<stockBid['006208']):
-            stockPrice['006208']=(stockAsk['006208']+stockBid['006208'])/2
-        if(stockPrice['00646']>stockAsk['00646'] or stockPrice['00646']<stockBid['00646']):
-            stockPrice['00646']=(stockAsk['00646']+stockBid['00646'])/2
-        mutexDict['00646'].release()
-        mutexDict['006208'].release()
-        mutexBidAskDict['00646'].release()
-        mutexBidAskDict['006208'].release()
+        mutexDict[g_upperid].acquire()
+        mutexDict[g_lowerid].acquire()
+        mutexBidAskDict[g_upperid].acquire()
+        mutexBidAskDict[g_lowerid].acquire()
+        if(stockPrice[g_upperid]>stockAsk[g_upperid] or stockPrice[g_upperid]<stockBid[g_upperid]):
+            stockPrice[g_upperid]=(stockAsk[g_upperid]+stockBid[g_upperid])/2
+        if(stockPrice[g_lowerid]>stockAsk[g_lowerid] or stockPrice[g_lowerid]<stockBid[g_lowerid]):
+            stockPrice[g_lowerid]=(stockAsk[g_lowerid]+stockBid[g_lowerid])/2
+        mutexDict[g_lowerid].release()
+        mutexDict[g_upperid].release()
+        mutexBidAskDict[g_lowerid].release()
+        mutexBidAskDict[g_upperid].release()
         
         #update share target
-        bot1.calculateSharetarget(upperprice=stockPrice['006208']\
-                                  ,lowerprice=stockPrice['00646'])
+        bot1.calculateSharetarget(upperprice=stockPrice[g_upperid]\
+                                  ,lowerprice=stockPrice[g_lowerid])
             
         current_time = time.time()
         #update orders
@@ -301,8 +309,8 @@ def jobs_per1min():
 thread = threading.Thread(target=jobs_per1min)
 thread.start()
 
-contract_006208 = api.Contracts.Stocks["006208"]
-contract_00646 = api.Contracts.Stocks["00646"]
+contract_006208 = api.Contracts.Stocks[g_upperid]
+contract_00646 = api.Contracts.Stocks[g_lowerid]
 
 tick_006208=api.quote.subscribe(\
     contract_006208,\

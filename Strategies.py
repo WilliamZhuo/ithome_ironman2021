@@ -6,89 +6,9 @@ import yfinance as yf
 import numpy as np
 import talib
 import ShiojiLogin
+import Bars
 api=ShiojiLogin.api
 DF_FUTURE_SYMBOL=pd.read_csv('SYMBOL.csv')  
-
-def getStockKbars(stockid='0050',start="2010-01-01",end="2021-09-02"):
-    global api
-    kbars = api.kbars(api.Contracts.Stocks[stockid], start=start, end=end)
-    df = pd.DataFrame({**kbars})
-    df.ts = pd.to_datetime(df.ts)
-    return df
-
-def getContractKbars(contract,start="2010-01-01",end="2021-09-02"):
-    global api
-    kbars = api.kbars(contract, start=start, end=end)
-    df = pd.DataFrame({**kbars})
-    df.ts = pd.to_datetime(df.ts)
-    return df
-    
-def getStockDailyPrice(stockid='0050',start="2010-01-01",end="2021-09-02",col='Close'):
-    df_kbars=getStockKbars(\
-            stockid=stockid\
-            ,start=start\
-            ,end=end)
-    close=extractCol(df_kbars,col='Close')
-    dayclose=createDaySeries(close)
-    openprice=extractCol(df_kbars,col='Open')
-    dayopen=createDaySeries(openprice,mode='open')    
-    highprice=extractCol(df_kbars,col='High')
-    dayhigh=createDaySeries(highprice,mode='high')    
-    lowprice=extractCol(df_kbars,col='Low')
-    daylow=createDaySeries(lowprice,mode='low')    
-    if(col=='Close'):
-        return dayclose
-    elif(col=='Open'):
-        return dayopen
-    elif(col=='High'):
-        return dayhigh
-    elif(col=='Low'):
-        return daylow
-    
-def extractCol(df_kbars,col='Close'):
-    series=df_kbars[col]
-    series.index=df_kbars.ts
-    return series
-
-def createDaySeries(series,mode='close'):
-    import datetime
-    date_begin=series.index[0].date()
-    date_end=series.index[-1].date()
-    delta = datetime.timedelta(days=1)
-    
-    def create_PairForSeries_Close(date,series):
-        val=series[str(date)][-1]
-        return pd.Series({date:val})  
-    def create_PairForSeries_Open(date,series):
-        val=series[str(date)][0]
-        return pd.Series({date:val})      
-    def create_PairForSeries_High(date,series):
-        val=series[str(date)].max()
-        return pd.Series({date:val})  
-    def create_PairForSeries_Low(date,series):
-        val=series[str(date)].min()
-        return pd.Series({date:val})  
-    
-    def create_PairForSeries(date,series):
-        if mode=='close':
-            return create_PairForSeries_Close(date,series)
-        elif mode=='open':
-            return create_PairForSeries_Open(date,series)
-        elif mode=='high':
-            return create_PairForSeries_High(date,series)
-        elif mode=='low':
-            return create_PairForSeries_Low(date,series)
-            
-    dayclose=create_PairForSeries(date_begin,series)
-    date_begin += delta
-    while date_begin <= date_end:
-        try:
-            append=create_PairForSeries(date_begin,series)
-            dayclose=dayclose.append(append)
-        except:
-            pass
-        date_begin += delta
-    return dayclose.dropna()
 
 def maSignal(close,periodLong=30,periodShort=5):
     maLong = talib.SMA(close,timeperiod=periodLong)
@@ -185,16 +105,29 @@ def calculatMDD(prefixProdSeries):
 def optimizeGeneral(dayopen,buy,parameters,args):
     bestret=args['bestret']
     retStrategy,ret_series=backtest_signal(dayopen,buy)
-    if retStrategy>bestret:
-        print("return:",retStrategy)
-        print("bestparameter:",parameters)        
+    if retStrategy>bestret:     
         args['bestparameter']=parameters
         args['bestret']=retStrategy
         args['bestbuy']=buy
         args['bestretseries']=ret_series
-        
-class strategy_SAR:
+
+    print("return:",args['bestret'])
+    print("bestparameter:",args['bestparameter'])   
+    print("parameter:",parameters)  
+    
+class strategy_template:
+    def __init_(self):
+        pass
+    def createsignal(self,kbars_daily,parameters):
+        pass
+    def bodyfor_optimize(self,args,previouslist):
+        pass
+class strategy_SAR(strategy_template):
     argsDefault={'acceleration':0.02,'maximum':0.2}
+    rangeDefault=[\
+        np.arange(0.01,0.1,0.01),\
+        np.arange(0.1,0.3,0.01)\
+        ]  
     #only int or float is supported right now
     def __init_(self):
         pass
@@ -227,9 +160,13 @@ class strategy_SAR:
         optimizeGeneral(dayopen,buy,parameters,args)
 
         
-class strategy_MA:
+class strategy_MA(strategy_template):
     argsDefault={'periodLong':30,'periodShort':5}
-    #argsRange={'acceleration':np.arange(0.02,0.2,0.02),'maximum':np.arange(0.2,0.2,0.2)}
+    rangeDefault=[\
+        np.arange(4,60,2),\
+        np.arange(4,60,2)\
+        ]  
+    
     #only int or float is supported right now
     def __init_(self):
         pass
@@ -265,8 +202,13 @@ class strategy_MA:
 
 
         
-class strategy_MACD:
+class strategy_MACD(strategy_template):
     argsDefault={'fastperiod':12,'slowperiod':26, 'signalperiod':9}
+    rangeDefault=[\
+        np.arange(4,60,2),\
+        np.arange(4,60,2),\
+        np.arange(5,20,1)\
+        ]
     #only int or float is supported right now
     def __init_(self):
         pass
@@ -308,8 +250,13 @@ class strategy_MACD:
         #通用
         optimizeGeneral(dayopen,buy,parameters,args)
 
-class strategy_BBAND:
+class strategy_BBAND(strategy_template):
     argsDefault={'timeperiod':5,'nbdevup':2, 'nbdevdn':2}
+    rangeDefault=[\
+        np.arange(4,60,2),\
+        np.arange(1.0,3.0,0.5),\
+        np.arange(1.0,3.0,0.5)\
+        ]
     #only int or float is supported right now
     def __init_(self):
         pass
@@ -355,8 +302,13 @@ class strategy_BBAND:
         #通用
         optimizeGeneral(dayopen,buy,parameters,args)
 
-class strategy_RSI:
+class strategy_RSI(strategy_template):
     argsDefault={'periodshort':5,'overbuy':80,'oversell':20}
+    rangeDefault=[\
+        np.arange(4,60,2),\
+        np.arange(0,100,10),\
+        np.arange(0,100,10)\
+        ]
     #only int or float is supported right now
     def __init_(self):
         pass
@@ -396,8 +348,11 @@ class strategy_RSI:
         #通用
         optimizeGeneral(dayopen,buy,parameters,args)
 
-class strategy_BOP:
+class strategy_BOP(strategy_template):
     argsDefault={'trigger':0}
+    rangeDefault=[\
+        np.arange(0.0,1.0,0.01)\
+        ]
     #only int or float is supported right now
     def __init_(self):
         pass
@@ -430,12 +385,19 @@ class strategy_BOP:
         optimizeGeneral(dayopen,buy,parameters,args)
 
 
-class strategy_Grid:
+class strategy_Grid(strategy_template):
     argsDefault={'BiasUpperLimit':2,\
                  'UpperLimitPosition':0.3,\
                  'BiasLowerLimit':0.5,\
                  'LowerLimitPosition':0.7,\
                  'BiasPeriod':20}
+    rangeDefault=[\
+        np.arange(1.0,2.0,0.1),\
+        np.arange(0.0,1.0,0.1),\
+        np.arange(0.1,1.0,0.1),\
+        np.arange(0.0,1.0,0.1),\
+        np.arange(5,60,5)\
+        ]
     #only int or float is supported right now
     def __init_(self):
         pass
@@ -534,13 +496,25 @@ def createFutureNameLookup():
             reference[l[i]]=name
     return 
 
+class struct_strategy_opt:
+    name=0
+    obj=0
+    therange=0
+    def __init__(self,name,obj:strategy_template,therange=None):
+        self.name=name
+        self.obj=obj
+        if therange is not None:
+            self.therange=therange
+        else:
+            self.therange=obj.rangeDefault
+            
 def optimizeListOfStrategies(kbars,strategylist):
     retlist={}
     for i in range(0,len(strategylist),1):
         strategy=strategylist[i]
         name=strategy.name
         obj=strategy.obj
-        therange=strategy.range
+        therange=strategy.therange
         print('Testing strategy:',name)
         ret=strategy_optimize(kbars,obj,therange)
         retlist[name]=ret
