@@ -1,11 +1,14 @@
 from shioaji.data import Kbars
 import pandas as pd
 import shioaji
+import shioaji.order as stOrder
 import matplotlib.pyplot as plt
 import yfinance as yf
 import numpy as np
 import ShiojiLogin
+ENABLE_PREMARKET=0
 api=ShiojiLogin.api
+money_thisSession=input("Please input Money(>0):\n")
 
 import datetime
 g_upperid='0052'
@@ -47,8 +50,21 @@ class GridBot:
         tradeLower=[]
         for i in range(0,len(tradelist),1):
             thistrade=tradelist[i]
-            cond1=str(thistrade.status.status)=='Status.Submitted'\
-                or str(thistrade.status.status)=='Status.PartFilled'
+            thisstatus=thistrade.status.status
+            isCancelled=( thisstatus == stOrder.Status.Cancelled)
+            isFailed=( thisstatus == stOrder.Status.Failed)
+            isFilled=( thisstatus ==  stOrder.Status.Filled)
+            isInactive=( thisstatus ==  stOrder.Status.Inactive)
+            isPartFilled=( thisstatus ==  stOrder.Status.PartFilled)
+            isPendingSubmit=( thisstatus ==  stOrder.Status.PendingSubmit)
+            isPreSubmitted=( thisstatus ==  stOrder.Status.PreSubmitted)            
+            isSubmitted=( thisstatus ==  stOrder.Status.Submitted)
+            
+            cond1=not(\
+                      isCancelled\
+                      or  isFailed\
+                      or  isFilled\
+                      ) 
             cond2=thistrade.contract.code==self.upperid
             cond3=thistrade.contract.code==self.lowerid
             cond4=self.lowerid!='Cash'
@@ -88,46 +104,60 @@ class GridBot:
         
         code=self.upperid
         money=self.money
+        
         if(quantityUpper>0):
-            order = api.Order(
-                price=stockBid[code],
-                quantity=quantityUpper,
-                action=shioaji.constant.Action.Buy,
-                price_type=shioaji.constant.StockPriceType.LMT,
-                order_type=shioaji.constant.TFTOrderType.ROD,     
-                order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
-                account=api.stock_account,
-            )
-            print(code,' buy:')
-            print('quantity:',quantityUpper)
-            print('price:',stockBid[code])
-        else:
-            order = api.Order(
-                price=stockAsk[code],
-                quantity=abs(quantityUpper),
-                action=shioaji.constant.Action.Sell,
-                price_type=shioaji.constant.StockPriceType.LMT,
-                order_type=shioaji.constant.TFTOrderType.ROD,     
-                order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
-                account=api.stock_account,
-            )
-            print(code,' sell:')
-            print('quantity:',abs(quantityUpper))
-            print('price:',stockAsk[code])
-            
-        if(abs(quantityUpper)*stockPrice[code]>=2000):    
-            contract = api.Contracts.Stocks[code]
             cost=stockBid[code]*quantityUpper
+            if(money<cost):
+                quantityUpper=max(int(money/stockBid[code]),0)
+        quantityUpperValid=abs(quantityUpper)>0
+        if(quantityUpperValid):
             if(quantityUpper>0):
-                if(money>cost):
-                    money=money-cost #local money int
-                    trade = api.place_order(contract, order)
+                order = api.Order(
+                    price=stockBid[code],
+                    quantity=quantityUpper,
+                    action=shioaji.constant.Action.Buy,
+                    price_type=shioaji.constant.StockPriceType.LMT,
+                    order_type=shioaji.constant.TFTOrderType.ROD,     
+                    order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
+                    account=api.stock_account,
+                )
+                print(code,' buy:')
+                print('quantity:',quantityUpper)
+                print('price:',stockBid[code])
             else:
-                trade = api.place_order(contract, order)
+                order = api.Order(
+                    price=stockAsk[code],
+                    quantity=abs(quantityUpper),
+                    action=shioaji.constant.Action.Sell,
+                    price_type=shioaji.constant.StockPriceType.LMT,
+                    order_type=shioaji.constant.TFTOrderType.ROD,     
+                    order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
+                    account=api.stock_account,
+                )
+                print(code,' sell:')
+                print('quantity:',abs(quantityUpper))
+                print('price:',stockAsk[code])
                 
-        if(self.lowerid!='Cash'):
+            if(abs(quantityUpper)*stockPrice[code]>=2000):    
+                contract = api.Contracts.Stocks[code]
+                cost=stockBid[code]*quantityUpper
+                if(quantityUpper>0):
+                    if(money>cost):
+                        money=money-cost #local money int
+                        trade = api.place_order(contract, order)
+                else:
+                    trade = api.place_order(contract, order)
+        if(quantityLower>0):
+            cost=stockBid[code]*quantityLower
+            if(money<cost):
+                quantityLower=max(int(money/stockBid[code]),0)
+        quantityLowerValid=abs(quantityLower)>0
+        if(self.lowerid!='Cash' and quantityLowerValid):
             code=self.lowerid
             if(quantityLower>0):
+                print(code,' buy:')
+                print('quantity:',quantityLower)
+                print('price:',stockBid[code])
                 order = api.Order(
                     price=stockBid[code],
                     quantity=quantityLower,
@@ -137,10 +167,10 @@ class GridBot:
                     order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
                     account=api.stock_account,
                 )
-                print(code,' buy:')
-                print('quantity:',quantityLower)
-                print('price:',stockBid[code])
             else:
+                print(code,' sell:')
+                print('quantity:',abs(quantityLower))
+                print('price:',stockAsk[code])
                 order = api.Order(
                     price=stockAsk[code],
                     quantity=-quantityLower,
@@ -150,9 +180,6 @@ class GridBot:
                     order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
                     account=api.stock_account,
                 )
-                print(code,' sell:')
-                print('quantity:',abs(quantityLower))
-                print('price:',stockAsk[code])
             if(abs(quantityLower)*stockPrice[code]>=2000):    
                 contract = api.Contracts.Stocks[code]
                 cost=stockBid[code]*quantityLower
@@ -164,19 +191,16 @@ class GridBot:
                     trade = api.place_order(contract, order)
                     
     def updateOrder(self):
-        now = datetime.datetime.now()
-        minute=now.minute
-        second=now.second
-        if(minute%3==0 and second>=30):
-            return
-        if(minute%3==1 and second<=30):
-            return
-        
+
         #1.delete orders
         self.cancelOrders()
         #2.update positions
         self.getPositions()
-        #3.create orders
+        #3.update share target
+        self.calculateSharetarget(upperprice=stockPrice[g_upperid]\
+                                  ,lowerprice=stockPrice[g_lowerid])
+
+        #4.create orders
         self.sendOrders()
         
     
@@ -256,7 +280,8 @@ def getCash():
 
 
 accountCash=getCash()
-bot1=GridBot(uppershare=0,lowershare=0,money=10000)
+bot1=GridBot(uppershare=0,lowershare=0,money=int(money_thisSession))
+bot1.getPositions()
 import threading, time
 from threading import Thread, Lock
 
@@ -278,8 +303,30 @@ stockAsk={g_upperid:snapshots[g_upperid][0]['close'],\
 
 def jobs_per1min():
     while(1):
+        current_time = time.time()
+        cooldown=60
+        time_to_sleep = cooldown - (current_time % cooldown)
+        time.sleep(time_to_sleep)
+        
+        #only trigger once per day
         bot1.UpdateMA()
         print('UpdateMA Done')
+        
+        now = datetime.datetime.now()
+        hour=now.hour
+        minute=now.minute
+        second=now.second
+        if(minute%3==0 and second>=30):
+            continue
+        if(minute%3==1 and second<=30):
+            continue
+        if(ENABLE_PREMARKET==0):
+            if(hour==13 and minute>20):
+                bot1.cancelOrders()
+                continue
+            if(hour<9 or (hour>13)):
+                continue
+            
         #get price 
         mutexDict[g_upperid].acquire()
         mutexDict[g_lowerid].acquire()
@@ -294,20 +341,11 @@ def jobs_per1min():
         mutexBidAskDict[g_lowerid].release()
         mutexBidAskDict[g_upperid].release()
         
-        #update share target
-        bot1.calculateSharetarget(upperprice=stockPrice[g_upperid]\
-                                  ,lowerprice=stockPrice[g_lowerid])
-            
-        current_time = time.time()
+        
+   
         #update orders
         bot1.updateOrder()
-        
-        cooldown=60
-        time_to_sleep = cooldown - (current_time % cooldown)
-        time.sleep(time_to_sleep)
 
-thread = threading.Thread(target=jobs_per1min)
-thread.start()
 
 contract_006208 = api.Contracts.Stocks[g_upperid]
 contract_00646 = api.Contracts.Stocks[g_lowerid]
@@ -363,3 +401,5 @@ def event_callback(resp_code: int, event_code: int, info: str, event: str):
     print(f'Event code: {event_code} | Event: {event}')
 api.quote.set_event_callback(event_callback)
 
+thread = threading.Thread(target=jobs_per1min)
+thread.start()
