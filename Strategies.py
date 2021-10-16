@@ -7,8 +7,27 @@ import numpy as np
 import talib
 import ShiojiLogin
 import Bars
+from enum import Enum
 api=ShiojiLogin.api
 DF_FUTURE_SYMBOL=pd.read_csv('SYMBOL.csv')  
+'''
+For stock
+G_spread=0.0000176
+G_tax=0.0015   
+G_commission=0.001425
+'''
+'''
+For Grid
+G_spread=0
+G_tax=0.0015   
+G_commission=0.001425
+'''
+
+#小台
+G_spread=3.6280082234853065666948845084049e-4
+G_tax=4.4109538687741224039698584818967e-5
+G_commission=4.4109538687741224039698584818967e-5
+
 
 def maSignal(close,periodLong=30,periodShort=5):
     maLong = talib.SMA(close,timeperiod=periodLong)
@@ -24,11 +43,12 @@ def period_profit(openprice,buybegin=0,buyend=10):
         print('div0')
     return openprice[buyend]/openprice[buybegin]
 
-def backtest_signal(dayopen,signal,spread=0.0000176,sizing=1.0):
+def backtest_signal(dayopen,signal,spread=G_spread,sizing=1.0):
     buy=signal.astype(float)
     position=buy.shift(1)
     position[0]=0.0
-    
+    global G_tax
+    global G_commission
     ret_series=pd.Series()    
     for i in range(0,position.size,1):
         try:
@@ -41,14 +61,14 @@ def backtest_signal(dayopen,signal,spread=0.0000176,sizing=1.0):
                 positionchange=abs(position[i]-position[i-1])
                 if(positionchange>0):
                     #spread=0.0000176  #價差,各商品不同,指數etf中最高的是006204 0.006
-                    tax=0.0015        #交易稅
-                    commission=0.001425 #手續費, **
-                    cost=tax+commission
+                    tax=G_tax       #交易稅
+                    commission=G_commission #手續費, **
+                    cost=tax+commission+spread
                     cost=cost*positionchange
             except:
                 pass           
             
-            ret=1.0+profit*position[i]*sizing+cost*sizing
+            ret=1.0+profit*position[i]*sizing-cost*sizing
             
             thepair=pd.Series({i:ret})
             ret_series=ret_series.append(thepair)     
@@ -116,7 +136,7 @@ def optimizeGeneral(dayopen,buy,parameters,args):
     print("parameter:",parameters)  
     
 class strategy_template:
-    def __init_(self):
+    def __init__(self):
         pass
     def createsignal(self,kbars_daily,parameters):
         pass
@@ -129,7 +149,7 @@ class strategy_SAR(strategy_template):
         np.arange(0.1,0.3,0.01)\
         ]  
     #only int or float is supported right now
-    def __init_(self):
+    def __init__(self):
         pass
     def createsignal(self,kbars_daily,parameters):
         dayhigh=kbars_daily['High']        
@@ -168,7 +188,7 @@ class strategy_MA(strategy_template):
         ]  
     
     #only int or float is supported right now
-    def __init_(self):
+    def __init__(self):
         pass
     def createsignal(self,kbars_daily,parameters):
         dayhigh=kbars_daily['High']        
@@ -209,9 +229,17 @@ class strategy_MACD(strategy_template):
         np.arange(4,60,2),\
         np.arange(5,20,1)\
         ]
+    class MODE(Enum):
+        MODE_HIST = 1
+        MODE_DIF  = 2
+        #MODE_REVERSETREND = 3 #需要實作crossover訊號
+    mode=MODE.MODE_HIST
     #only int or float is supported right now
-    def __init_(self):
-        pass
+    def __init__(self,mode=None):
+        if(mode==None):
+            pass
+        else:
+            self.mode=mode
     def createsignal(self,kbars_daily,parameters):
         dayhigh=kbars_daily['High']        
         daylow=kbars_daily['Low'] 
@@ -223,8 +251,11 @@ class strategy_MACD(strategy_template):
                           fastperiod=fastperiod, \
                           slowperiod=slowperiod, \
                           signalperiod=signalperiod)
-        return macdhist>0
-
+        if(self.mode==self.MODE.MODE_HIST):
+            return macdhist>0
+        else:
+            return macd>0
+        
     
     def bodyfor_optimize(self,args,previouslist):
         #args:kbars_daily + othre data
@@ -242,6 +273,8 @@ class strategy_MACD(strategy_template):
         signalperiod=previouslist[2]
         if fastperiod>=slowperiod:
             return
+        if signalperiod>=fastperiod:
+            return
         parameters={'fastperiod':fastperiod,\
                     'slowperiod':slowperiod,\
                     'signalperiod':signalperiod}
@@ -257,9 +290,17 @@ class strategy_BBAND(strategy_template):
         np.arange(1.0,3.0,0.5),\
         np.arange(1.0,3.0,0.5)\
         ]
+    class MODE(Enum):
+        MODE_INBAND = 1
+        MODE_FOLLOWTREND  = 2
+        #MODE_REVERSETREND = 3 #需要實作crossover訊號
+    mode=MODE.MODE_INBAND
     #only int or float is supported right now
-    def __init_(self):
-        pass
+    def __init__(self,mode=None):
+        if(mode==None):
+            pass
+        else:
+            self.mode=mode
     def createsignal(self,kbars_daily,parameters):
         dayhigh=kbars_daily['High']        
         daylow=kbars_daily['Low'] 
@@ -274,8 +315,14 @@ class strategy_BBAND(strategy_template):
                          nbdevup=nbdevup,\
                          nbdevdn=nbdevdn,\
                          matype=talib.MA_Type.SMA)
-        a=dayclose>lowerband
-        b=dayclose<upperband
+        if(self.mode==self.MODE.MODE_INBAND):
+            a=dayclose>lowerband
+            b=dayclose<upperband
+            return a*b
+        elif(self.mode==self.MODE.MODE_FOLLOWTREND):
+            a=dayclose>upperband
+            b=1        
+            return a
         return a*b
 
     
@@ -309,9 +356,17 @@ class strategy_RSI(strategy_template):
         np.arange(0,100,10),\
         np.arange(0,100,10)\
         ]
+    class MODE(Enum):
+        MODE_INBAND = 1
+        MODE_FOLLOWTREND  = 2
+        #MODE_RSICROSS  #參數差太多,以後有需要另外做一隻
+    mode=MODE.MODE_INBAND
     #only int or float is supported right now
-    def __init_(self):
-        pass
+    def __init__(self,mode=None):
+        if(mode==None):
+            pass
+        else:
+            self.mode=mode
     def createsignal(self,kbars_daily,parameters):
         dayhigh=kbars_daily['High']        
         daylow=kbars_daily['Low'] 
@@ -320,10 +375,10 @@ class strategy_RSI(strategy_template):
         overbuy =parameters['overbuy']
         oversell =parameters['oversell']
         real = talib.RSI(dayclose, timeperiod=period)
-        
-        return (real<=overbuy) * (real>=oversell)
-
-    
+        if(self.mode==self.MODE.MODE_INBAND):
+            return (real<=overbuy) * (real>=oversell)
+        elif(self.mode==self.MODE.MODE_FOLLOWTREND):
+            return (real>overbuy)
     def bodyfor_optimize(self,args,previouslist):
         #args:kbars_daily + othre data
         #previouslist:[periodLong,periodShort]
@@ -354,7 +409,7 @@ class strategy_BOP(strategy_template):
         np.arange(0.0,1.0,0.01)\
         ]
     #only int or float is supported right now
-    def __init_(self):
+    def __init__(self):
         pass
     def createsignal(self,kbars_daily,parameters):
         dayhigh=kbars_daily['High']        
@@ -399,7 +454,7 @@ class strategy_Grid(strategy_template):
         np.arange(5,60,5)\
         ]
     #only int or float is supported right now
-    def __init_(self):
+    def __init__(self):
         pass
     def createsignal(self,kbars_daily,parameters):
         dayhigh=kbars_daily['High']        

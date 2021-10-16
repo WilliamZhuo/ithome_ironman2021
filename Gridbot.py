@@ -6,7 +6,11 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 import numpy as np
 import ShiojiLogin
-ENABLE_PREMARKET=0
+import os
+DEBUG_MODE=True
+DEBUG_SELLALOT=True
+botLowerBound=80000
+ENABLE_PREMARKET=True
 api=ShiojiLogin.api
 money_thisSession=input("Please input Money(>0):\n")
 
@@ -74,12 +78,15 @@ class GridBot:
                 tradeLower.append(thistrade)
         
         for i in range(0,len(tradeUpper),1):
+            api.update_status()
             api.cancel_order(trade=tradeUpper[i])
         if(self.lowerid!='Cash'):
             for i in range(0,len(tradeLower),1):
+                api.update_status()
                 api.cancel_order(trade=tradeLower[i])
                 
     def getPositions(self):
+        api.update_status()
         portfolio=api.list_positions(unit=shioaji.constant.Unit.Share)
         df_positions = pd.DataFrame(portfolio)
         quantity=df_positions.loc[df_positions['code'] == self.upperid]['quantity']
@@ -101,6 +108,14 @@ class GridBot:
         quantityUpper=max(quantityUpper,-999)
         quantityLower=min(quantityLower,999)
         quantityLower=max(quantityLower,-999)
+        val=self.uppershareTarget*self.upperprice+self.lowerprice*self.lowershareTarget+self.money
+        if(DEBUG_SELLALOT):
+            if(val<botLowerBound):
+                return
+            if(abs(quantityUpper)==999):
+                return
+            if(abs(quantityLower)==999):
+                return
         
         code=self.upperid
         money=self.money
@@ -192,17 +207,19 @@ class GridBot:
                     
     def updateOrder(self):
 
-        #1.delete orders
-        self.cancelOrders()
-        #2.update positions
-        self.getPositions()
+        try:
+            #1.delete orders
+            self.cancelOrders()
+            #2.update positions
+            self.getPositions()
         #3.update share target
         self.calculateSharetarget(upperprice=stockPrice[g_upperid]\
                                   ,lowerprice=stockPrice[g_lowerid])
 
         #4.create orders
         self.sendOrders()
-        
+        except:
+            return
     
     def calculateSharetarget(self,upperprice,lowerprice):
         global accountCash
@@ -240,7 +257,10 @@ class GridBot:
         self.lowershareTarget=int((1.0-shareTarget)*capitalInBot/lowerprice)
         self.upperprice=upperprice
         self.lowerprice=lowerprice
-        
+        val=self.uppershareTarget*self.upperprice+self.lowerprice*self.lowershareTarget+self.money
+        if(DEBUG_SELLALOT):
+            if(val<botLowerBound):
+                return
     
     def UpdateMA(self):
         now = datetime.datetime.now()
@@ -268,16 +288,23 @@ class GridBot:
     
             
 def getCash():
+    global accountCash
+    
     #交割金
-    settlement = api.list_settlements(api.stock_account)   
+    settlement = api.list_settlements(api.stock_account) 
+    print(settlement)
     df_settlement = pd.DataFrame(settlement)     
     cash_setttlement=float(df_settlement['t1_money'])+float(df_settlement['t2_money'])
     #bank cash
     acc_balance = api.account_balance()   
-    df_acc = pd.DataFrame(acc_balance)     
-         
-    return  float(df_acc['acc_balance'])+cash_setttlement
-
+    df_acc = pd.DataFrame(acc_balance)    
+    print(acc_balance) 
+    acc_f=float(df_acc['acc_balance'])
+    if(acc_f>0):
+        return  acc_f+cash_setttlement
+    else:
+        return  accountCash
+        
 
 accountCash=getCash()
 bot1=GridBot(uppershare=0,lowershare=0,money=int(money_thisSession))
@@ -320,7 +347,7 @@ def jobs_per1min():
             continue
         if(minute%3==1 and second<=30):
             continue
-        if(ENABLE_PREMARKET==0):
+        if(not ENABLE_PREMARKET):
             if(hour==13 and minute>20):
                 bot1.cancelOrders()
                 continue
@@ -401,5 +428,9 @@ def event_callback(resp_code: int, event_code: int, info: str, event: str):
     print(f'Event code: {event_code} | Event: {event}')
 api.quote.set_event_callback(event_callback)
 
-thread = threading.Thread(target=jobs_per1min)
-thread.start()
+if(DEBUG_MODE):
+    jobs_per1min()
+else:
+    thread = threading.Thread(target=jobs_per1min)
+    thread.start()
+
