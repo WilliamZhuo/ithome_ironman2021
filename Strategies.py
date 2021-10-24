@@ -11,13 +11,13 @@ from enum import Enum
 api=ShiojiLogin.api
 DF_FUTURE_SYMBOL=pd.read_csv('SYMBOL.csv')  
 '''
-For stock
+#For stock
 G_spread=0.0000176
 G_tax=0.0015   
 G_commission=0.001425
 '''
 '''
-For Grid
+#For Grid
 G_spread=0
 G_tax=0.0015   
 G_commission=0.001425

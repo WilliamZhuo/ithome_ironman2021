@@ -9,7 +9,8 @@ import ShiojiLogin
 import os
 DEBUG_MODE=True
 DEBUG_SELLALOT=True
-botLowerBound=80000
+botLowerBound=100000
+botUpperBound=115000
 ENABLE_PREMARKET=True
 api=ShiojiLogin.api
 money_thisSession=input("Please input Money(>0):\n")
@@ -31,12 +32,11 @@ class GridBot:
     MA=0
     money=0
 
-    parameters={'BiasUpperLimit':1.2,\
-                 'UpperLimitPosition':0.1,\
-                 'BiasLowerLimit':0.9,\
-                 'LowerLimitPosition':0.9,\
-                 'BiasPeriod':30}
-    
+    parameters={'BiasUpperLimit':2.2,\
+             'UpperLimitPosition':0.4,\
+             'BiasLowerLimit':0.9,\
+             'LowerLimitPosition':0.9,\
+             'BiasPeriod':15}
     year=0
     month=0
     day=0
@@ -100,6 +100,7 @@ class GridBot:
                 self.lowershare=0
             else:
                 self.lowershare=int(quantity)
+            
                 
     def sendOrders(self):
         quantityUpper=self.uppershareTarget-self.uppershare
@@ -108,13 +109,19 @@ class GridBot:
         quantityUpper=max(quantityUpper,-999)
         quantityLower=min(quantityLower,999)
         quantityLower=max(quantityLower,-999)
-        val=self.uppershareTarget*self.upperprice+self.lowerprice*self.lowershareTarget+self.money
+        print('quantityUpper:'+str(quantityUpper))
+        print('quantityLower:'+str(quantityLower))
+        val=self.uppershareTarget*self.upperprice+self.lowerprice*self.lowershareTarget
         if(DEBUG_SELLALOT):
-            if(val<botLowerBound):
+            if(quantityUpper<0 and quantityLower<0):
                 return
-            if(abs(quantityUpper)==999):
+            if(val<botLowerBound):                
                 return
-            if(abs(quantityLower)==999):
+            if(val>botUpperBound):
+                return
+            if(abs(quantityUpper)==999):                
+                return
+            if(abs(quantityLower)==999):                
                 return
         
         code=self.upperid
@@ -212,21 +219,26 @@ class GridBot:
             self.cancelOrders()
             #2.update positions
             self.getPositions()
-        #3.update share target
-        self.calculateSharetarget(upperprice=stockPrice[g_upperid]\
-                                  ,lowerprice=stockPrice[g_lowerid])
-
-        #4.create orders
-        self.sendOrders()
+            #3.update share target
+            self.calculateSharetarget(upperprice=stockPrice[g_upperid]\
+                                      ,lowerprice=stockPrice[g_lowerid])
+            #4.create orders
+            self.sendOrders()
         except:
             return
     
     def calculateSharetarget(self,upperprice,lowerprice):
         global accountCash
-        currentcash=getCash()
-        self.money+=currentcash-accountCash
-        accountCash=currentcash
+        now = datetime.datetime.now()
+        hour=now.hour
         
+        if(hour>=1 and hour<=7):
+            self.money=self.money
+        else:
+            currentcash=getCash()        
+            self.money+=currentcash-accountCash
+            accountCash=currentcash
+            
         MA=self.MA
         uppershare=self.uppershare
         lowershare=self.lowershare
@@ -253,14 +265,21 @@ class GridBot:
        # print('shareTarget:',shareTarget)
         #print("shareTarget:",shareTarget)
         #計算目標部位(股數)
-        self.uppershareTarget=int(shareTarget*capitalInBot/upperprice)
-        self.lowershareTarget=int((1.0-shareTarget)*capitalInBot/lowerprice)
+        uppershareTarget=int(shareTarget*capitalInBot/upperprice)
+        lowershareTarget=int((1.0-shareTarget)*capitalInBot/lowerprice)
+        upperprice=upperprice
+        lowerprice=lowerprice
+        val=uppershareTarget*upperprice+lowerprice*lowershareTarget
+
+        if(DEBUG_SELLALOT):
+            if(val<botLowerBound):                
+                return
+            if(val>botUpperBound):
+                return
+        self.uppershareTarget=uppershareTarget
+        self.lowershareTarget=lowershareTarget
         self.upperprice=upperprice
         self.lowerprice=lowerprice
-        val=self.uppershareTarget*self.upperprice+self.lowerprice*self.lowershareTarget+self.money
-        if(DEBUG_SELLALOT):
-            if(val<botLowerBound):
-                return
     
     def UpdateMA(self):
         now = datetime.datetime.now()
@@ -366,10 +385,7 @@ def jobs_per1min():
         mutexDict[g_lowerid].release()
         mutexDict[g_upperid].release()
         mutexBidAskDict[g_lowerid].release()
-        mutexBidAskDict[g_upperid].release()
-        
-        
-   
+        mutexBidAskDict[g_upperid].release()   
         #update orders
         bot1.updateOrder()
 
