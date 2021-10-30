@@ -9,8 +9,8 @@ import ShiojiLogin
 import os
 DEBUG_MODE=True
 DEBUG_SELLALOT=True
-botLowerBound=100000
-botUpperBound=115000
+botLowerBound=120000
+botUpperBound=150000
 ENABLE_PREMARKET=True
 api=ShiojiLogin.api
 money_thisSession=input("Please input Money(>0):\n")
@@ -345,6 +345,44 @@ stockBid={g_upperid:snapshots[g_upperid][0]['close'],\
           g_lowerid:snapshots[g_lowerid][0]['close']}
 stockAsk={g_upperid:snapshots[g_upperid][0]['close'],\
           g_lowerid:snapshots[g_lowerid][0]['close']}
+msglist=[]
+statlist=[]
+
+mutexmsg =Lock()
+mutexstat =Lock()
+mutexgSettle =Lock()
+g_settlement=0
+def place_cb(stat, msg):
+    print('my_place_callback')
+    print(stat, msg)
+    if(len(msg)==13):
+        global g_settlement
+        action=msg['action']
+        code=msg['code']
+        price=msg['price']
+        quantity=msg['quantity']
+        mutexgSettle.acquire()
+        if(action=='Buy'):
+            g_settlement-=price*quantity
+        elif(action=='Sell'):
+            g_settlement+=price*quantity
+        else:
+            pass
+        mutexgSettle.release()
+    mutexmsg.acquire()
+    try:
+        msglist.append(msg)
+    except:
+        pass
+    mutexmsg.release()    
+    mutexstat.acquire()
+    try:
+        statlist.appen(stat)
+    except:
+        pass
+    mutexstat.release()
+
+api.set_order_callback(place_cb)
 
 
 def jobs_per1min():
