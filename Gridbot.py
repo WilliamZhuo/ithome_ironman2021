@@ -7,13 +7,16 @@ import yfinance as yf
 import numpy as np
 import ShiojiLogin
 import os
+import logging
+
 DEBUG_MODE=True
 DEBUG_SELLALOT=True
-botLowerBound=120000
-botUpperBound=150000
+botLowerBound=135000
+botUpperBound=170000
 ENABLE_PREMARKET=True
 api=ShiojiLogin.api
 money_thisSession=input("Please input Money(>0):\n")
+logging.basicConfig(filename='gridbotlog.log', level=logging.DEBUG)
 
 import datetime
 g_upperid='0052'
@@ -109,8 +112,13 @@ class GridBot:
         quantityUpper=max(quantityUpper,-999)
         quantityLower=min(quantityLower,999)
         quantityLower=max(quantityLower,-999)
-        print('quantityUpper:'+str(quantityUpper))
-        print('quantityLower:'+str(quantityLower))
+        logging.debug('uppershare:'+str(self.uppershare))
+        logging.debug('lowershare:'+str(self.lowershare))
+        logging.debug('uppershareTarget:'+str(self.uppershareTarget))
+        logging.debug('lowershareTarget:'+str(self.lowershareTarget))
+        logging.debug('quantityUpper:'+str(quantityUpper))
+        logging.debug('quantityLower:'+str(quantityLower))
+        
         val=self.uppershareTarget*self.upperprice+self.lowerprice*self.lowershareTarget
         if(DEBUG_SELLALOT):
             if(quantityUpper<0 and quantityLower<0):
@@ -126,7 +134,7 @@ class GridBot:
         
         code=self.upperid
         money=self.money
-        
+        logging.debug('money1:'+str(money))
         if(quantityUpper>0):
             cost=stockBid[code]*quantityUpper
             if(money<cost):
@@ -143,9 +151,9 @@ class GridBot:
                     order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
                     account=api.stock_account,
                 )
-                print(code,' buy:')
-                print('quantity:',quantityUpper)
-                print('price:',stockBid[code])
+                logging.debug(code+' buy:')
+                logging.debug('quantity:'+str(quantityUpper))
+                logging.debug('price:'+str(stockBid[code]))
             else:
                 order = api.Order(
                     price=stockAsk[code],
@@ -156,9 +164,9 @@ class GridBot:
                     order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
                     account=api.stock_account,
                 )
-                print(code,' sell:')
-                print('quantity:',abs(quantityUpper))
-                print('price:',stockAsk[code])
+                logging.debug(code+' sell:')
+                logging.debug('quantity:'+str(abs(quantityUpper)))
+                logging.debug('price:'+str(stockAsk[code]))
                 
             if(abs(quantityUpper)*stockPrice[code]>=2000):    
                 contract = api.Contracts.Stocks[code]
@@ -169,17 +177,18 @@ class GridBot:
                         trade = api.place_order(contract, order)
                 else:
                     trade = api.place_order(contract, order)
+        logging.debug('money2:'+str(money))
+        code=self.lowerid
         if(quantityLower>0):
             cost=stockBid[code]*quantityLower
             if(money<cost):
                 quantityLower=max(int(money/stockBid[code]),0)
         quantityLowerValid=abs(quantityLower)>0
         if(self.lowerid!='Cash' and quantityLowerValid):
-            code=self.lowerid
             if(quantityLower>0):
-                print(code,' buy:')
-                print('quantity:',quantityLower)
-                print('price:',stockBid[code])
+                logging.debug(code+' buy:')
+                logging.debug('quantity:'+str(quantityLower))
+                logging.debug('price:'+str(stockBid[code]))
                 order = api.Order(
                     price=stockBid[code],
                     quantity=quantityLower,
@@ -190,9 +199,9 @@ class GridBot:
                     account=api.stock_account,
                 )
             else:
-                print(code,' sell:')
-                print('quantity:',abs(quantityLower))
-                print('price:',stockAsk[code])
+                logging.debug(code+' sell:')
+                logging.debug('quantity:'+str(abs(quantityLower)))
+                logging.debug('price:'+str(stockAsk[code]))
                 order = api.Order(
                     price=stockAsk[code],
                     quantity=-quantityLower,
@@ -216,16 +225,20 @@ class GridBot:
 
         try:
             #1.delete orders
+            logging.debug('cancelOrders')
             self.cancelOrders()
             #2.update positions
+            logging.debug('getPositions')
             self.getPositions()
             #3.update share target
+            logging.debug('calculateSharetarget')
             self.calculateSharetarget(upperprice=stockPrice[g_upperid]\
                                       ,lowerprice=stockPrice[g_lowerid])
             #4.create orders
+            logging.debug('sendOrders')
             self.sendOrders()
-        except:
-            return
+        except Exception as e: # work on python 3.x
+            logging.error('updateOrder Error Message: '+ str(e))
     
     def calculateSharetarget(self,upperprice,lowerprice):
         global accountCash
@@ -283,8 +296,8 @@ class GridBot:
     
     def UpdateMA(self):
         now = datetime.datetime.now()
-        if(now.year!=self.year and now.month!= self.month and  now.day!=self.day):
-            print('reading upper')
+        if(now.year!=self.year or now.month!= self.month or  now.day!=self.day):
+            logging.debug('reading upper')
             upper = yf.Ticker(self.upperid+".tw")
             upper_hist = upper.history(period="3mo")
             period=self.parameters['BiasPeriod']
@@ -292,7 +305,7 @@ class GridBot:
             upper_close=upper_hist['Close']
             upperMA=upper_close[-(period+1):-1].sum()/period
             if(self.lowerid!='Cash'):
-                print('reading lower')
+                logging.debug('reading lower')
                 lower = yf.Ticker(self.lowerid+".tw")
                 lower_hist = lower.history(period="3mo")
                 lower_close=lower_hist['Close']
@@ -311,13 +324,13 @@ def getCash():
     
     #交割金
     settlement = api.list_settlements(api.stock_account) 
-    print(settlement)
+    logging.debug(settlement)
     df_settlement = pd.DataFrame(settlement)     
     cash_setttlement=float(df_settlement['t1_money'])+float(df_settlement['t2_money'])
     #bank cash
     acc_balance = api.account_balance()   
     df_acc = pd.DataFrame(acc_balance)    
-    print(acc_balance) 
+    logging.debug(acc_balance) 
     acc_f=float(df_acc['acc_balance'])
     if(acc_f>0):
         return  acc_f+cash_setttlement
@@ -353,8 +366,9 @@ mutexstat =Lock()
 mutexgSettle =Lock()
 g_settlement=0
 def place_cb(stat, msg):
-    print('my_place_callback')
-    print(stat, msg)
+    logging.debug('my_place_callback')
+    logging.debug(str(stat))
+    logging.debug(str(msg))
     if(len(msg)==13):
         global g_settlement
         action=msg['action']
@@ -372,14 +386,14 @@ def place_cb(stat, msg):
     mutexmsg.acquire()
     try:
         msglist.append(msg)
-    except:
-        pass
+    except Exception as e: # work on python 3.x
+        logging.error('place_cb  Error Message A: '+ str(e))
     mutexmsg.release()    
     mutexstat.acquire()
     try:
-        statlist.appen(stat)
-    except:
-        pass
+        statlist.append(stat)
+    except Exception as e: # work on python 3.x
+        logging.error('place_cb  Error Message B: '+ str(e))
     mutexstat.release()
 
 api.set_order_callback(place_cb)
@@ -394,7 +408,7 @@ def jobs_per1min():
         
         #only trigger once per day
         bot1.UpdateMA()
-        print('UpdateMA Done')
+        logging.debug('UpdateMA Done')
         
         now = datetime.datetime.now()
         hour=now.hour
@@ -470,16 +484,29 @@ api.quote.set_on_tick_stk_v1_callback(STKtick_callback)
 @api.on_bidask_stk_v1()
 def STK_BidAsk_callback(exchange: Exchange, bidask:BidAskSTKv1):
     code=bidask['code']
-    mutexBidAskDict[code].acquire()    
-    stockBid[code]=float(bidask['bid_price'][0])
-    stockAsk[code]=float(bidask['ask_price'][0])
+    mutexBidAskDict[code].acquire()
+    
+    logging.debug('bid_price') 
+    for i in bidask['bid_price']:
+        logging.debug(str(i))     
+    logging.debug('ask_price') 
+    for i in bidask['ask_price']:
+        logging.debug(str(i)) 
+        
+    bidlist=[float(i) for i in bidask['bid_price']]
+    asklist=[float(i) for i in bidask['ask_price']]
+
+    #stockBid[code]=max(bidlist)
+    #stockAsk[code]=min(asklist)
+    stockBid[code]=bidlist[0]
+    stockAsk[code]=asklist[0]
     mutexBidAskDict[code].release()
     #print(f"Exchange: {exchange}, BidAsk: {bidask}")
 api.quote.set_on_bidask_stk_v1_callback(STK_BidAsk_callback)
 
 @api.quote.on_event
 def event_callback(resp_code: int, event_code: int, info: str, event: str):
-    print(f'Event code: {event_code} | Event: {event}')
+    logging.debug(f'Event code: {event_code} | Event: {event}')
 api.quote.set_event_callback(event_callback)
 
 if(DEBUG_MODE):
