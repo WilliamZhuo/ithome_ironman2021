@@ -11,11 +11,12 @@ import logging
 
 DEBUG_MODE=True
 DEBUG_SELLALOT=True
-botLowerBound=135000
-botUpperBound=170000
+botLowerBound=170000
+botUpperBound=220000
+targetCapital=200000
 ENABLE_PREMARKET=True
 api=ShiojiLogin.api
-money_thisSession=input("Please input Money(>0):\n")
+#money_thisSession=input("Please input Money(>0):\n")
 logging.basicConfig(filename='gridbotlog.log', level=logging.DEBUG)
 
 import datetime
@@ -337,16 +338,6 @@ def getCash():
     else:
         return  accountCash
         
-
-accountCash=getCash()
-bot1=GridBot(uppershare=0,lowershare=0,money=int(money_thisSession))
-bot1.getPositions()
-import threading, time
-from threading import Thread, Lock
-
-mutexDict ={g_upperid:Lock(),g_lowerid:Lock()}
-mutexBidAskDict ={g_upperid:Lock(),g_lowerid:Lock()}
-subscribeStockList=[g_upperid,g_lowerid]
 snapshots={}
 snapshots[g_upperid] = api.snapshots([api.Contracts.Stocks[g_upperid]])
 snapshots[g_lowerid] = api.snapshots([api.Contracts.Stocks[g_lowerid]])
@@ -358,6 +349,20 @@ stockBid={g_upperid:snapshots[g_upperid][0]['close'],\
           g_lowerid:snapshots[g_lowerid][0]['close']}
 stockAsk={g_upperid:snapshots[g_upperid][0]['close'],\
           g_lowerid:snapshots[g_lowerid][0]['close']}
+accountCash=getCash()
+bot1=GridBot(uppershare=0,lowershare=0,money=0)
+bot1.getPositions()
+initmoney=targetCapital-stockPrice[g_upperid]*bot1.uppershare-stockPrice[g_lowerid]*bot1.lowershare
+initmoney=min(initmoney,accountCash)
+bot1.money=initmoney
+import threading, time
+from threading import Thread, Lock
+
+mutexDict ={g_upperid:Lock(),g_lowerid:Lock()}
+mutexBidAskDict ={g_upperid:Lock(),g_lowerid:Lock()}
+subscribeStockList=[g_upperid,g_lowerid]
+
+#抓取創建BOT當下的價格當作預設值
 msglist=[]
 statlist=[]
 
@@ -409,6 +414,7 @@ def jobs_per1min():
         #only trigger once per day
         bot1.UpdateMA()
         logging.debug('UpdateMA Done')
+        logging.debug('g_settlement:'+str(g_settlement))
         
         now = datetime.datetime.now()
         hour=now.hour
