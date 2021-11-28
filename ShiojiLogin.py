@@ -23,6 +23,7 @@ def shioajiLogin(simulation=False):
     api.login(
         person_id=person_id, 
         passwd=passwd, 
+        contracts_timeout=10000,
         contracts_cb=lambda security_type: print(f"{repr(security_type)} fetch done.")
     )
         

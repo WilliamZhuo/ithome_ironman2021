@@ -8,7 +8,7 @@ import numpy as np
 import ShiojiLogin
 import os
 import logging
-
+import pickle
 DEBUG_MODE=True
 DEBUG_SELLALOT=True
 botLowerBound=170000
@@ -338,17 +338,15 @@ def getCash():
     else:
         return  accountCash
         
-snapshots={}
-snapshots[g_upperid] = api.snapshots([api.Contracts.Stocks[g_upperid]])
-snapshots[g_lowerid] = api.snapshots([api.Contracts.Stocks[g_lowerid]])
-
-#抓取創建BOT當下的價格當作預設值
-stockPrice={g_upperid:snapshots[g_upperid][0]['close'],\
-            g_lowerid:snapshots[g_lowerid][0]['close']}
-stockBid={g_upperid:snapshots[g_upperid][0]['close'],\
-          g_lowerid:snapshots[g_lowerid][0]['close']}
-stockAsk={g_upperid:snapshots[g_upperid][0]['close'],\
-          g_lowerid:snapshots[g_lowerid][0]['close']}
+snaprice={}
+snaprice[g_upperid] = api.snapshots([api.Contracts.Stocks[g_upperid]])
+snaprice[g_lowerid] = api.snapshots([api.Contracts.Stocks[g_lowerid]])
+stockPrice={g_upperid:snaprice[g_upperid][0]['close'],\
+            g_lowerid:snaprice[g_lowerid][0]['close']}
+stockBid={g_upperid:snaprice[g_upperid][0]['close'],\
+          g_lowerid:snaprice[g_lowerid][0]['close']}
+stockAsk={g_upperid:snaprice[g_upperid][0]['close'],\
+          g_lowerid:snaprice[g_lowerid][0]['close']}
 accountCash=getCash()
 bot1=GridBot(uppershare=0,lowershare=0,money=0)
 bot1.getPositions()
@@ -424,10 +422,15 @@ def jobs_per1min():
             continue
         if(minute%3==1 and second<=30):
             continue
+        if(hour==13 and minute>20):
+            bot1.cancelOrders()
+            continue
+        if(hour>=15 and hour<=18):
+            filehandler = open(b"money.obj","wb")
+            pickle.dump(bot1.money,filehandler)
+            break
         if(not ENABLE_PREMARKET):
-            if(hour==13 and minute>20):
-                bot1.cancelOrders()
-                continue
+ 
             if(hour<9 or (hour>13)):
                 continue
             
