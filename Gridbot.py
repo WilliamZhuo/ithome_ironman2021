@@ -22,6 +22,8 @@ logging.basicConfig(filename='gridbotlog.log', level=logging.DEBUG)
 import datetime
 g_upperid='0052'
 g_lowerid='00662'
+
+initmoney=0
 ### 之後改成 money(init)=target_assset-uppershare*upperprice-lowershare*lowerprice
 target_assset=0
 class GridBot:
@@ -247,11 +249,9 @@ class GridBot:
         hour=now.hour
         
         if(hour>=1 and hour<=7):
-            self.money=self.money
+            self.money=initmoney+g_settlement
         else:
-            currentcash=getCash()        
-            self.money+=currentcash-accountCash
-            accountCash=currentcash
+            self.money=initmoney+g_settlement
             
         MA=self.MA
         uppershare=self.uppershare
@@ -338,6 +338,14 @@ def getCash():
     else:
         return  accountCash
         
+def pickle_dump(filename,obj):
+    with open(filename, 'wb') as handle:
+        pickle.dump(obj, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+def pickle_read(filename):
+    with open(filename, 'rb') as handle:
+        return pickle.load(handle)
+    
 snaprice={}
 snaprice[g_upperid] = api.snapshots([api.Contracts.Stocks[g_upperid]])
 snaprice[g_lowerid] = api.snapshots([api.Contracts.Stocks[g_lowerid]])
@@ -347,11 +355,21 @@ stockBid={g_upperid:snaprice[g_upperid][0]['close'],\
           g_lowerid:snaprice[g_lowerid][0]['close']}
 stockAsk={g_upperid:snaprice[g_upperid][0]['close'],\
           g_lowerid:snaprice[g_lowerid][0]['close']}
+    
 accountCash=getCash()
 bot1=GridBot(uppershare=0,lowershare=0,money=0)
 bot1.getPositions()
-initmoney=targetCapital-stockPrice[g_upperid]*bot1.uppershare-stockPrice[g_lowerid]*bot1.lowershare
-initmoney=min(initmoney,accountCash)
+
+try:
+    initmoney=pickle_read('money.p')
+except:
+    initmoney=0
+totalcapital=initmoney+stockPrice[g_upperid]*bot1.uppershare+stockPrice[g_lowerid]*bot1.lowershare
+print("totalcapital is "+str(totalcapital))
+ans=input("perform withdraw or deposit(y/n):\n")
+if(ans=='y'):
+    amount=input("withdraw or deposit amount(>0:deposit,<0:withdraw):\n")
+    initmoney=initmoney+int(amount)
 bot1.money=initmoney
 import threading, time
 from threading import Thread, Lock
@@ -423,11 +441,13 @@ def jobs_per1min():
         if(minute%3==1 and second<=30):
             continue
         if(hour==13 and minute>20):
-            bot1.cancelOrders()
+            try:
+                bot1.cancelOrders()
+            except Exception as e:
+                logging.error('jobs_per1min  Error Message A: '+ str(e))
             continue
-        if(hour>=15 and hour<=18):
-            filehandler = open(b"money.obj","wb")
-            pickle.dump(bot1.money,filehandler)
+        if(hour>=14 and hour<=15):
+            pickle_dump( "money.p",bot1.money)
             break
         if(not ENABLE_PREMARKET):
  
