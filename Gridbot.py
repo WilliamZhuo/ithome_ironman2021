@@ -11,21 +11,17 @@ import logging
 import pickle
 DEBUG_MODE=True
 DEBUG_SELLALOT=True
-botLowerBound=170000
-botUpperBound=220000
-targetCapital=200000
 ENABLE_PREMARKET=True
 api=ShiojiLogin.api
 #money_thisSession=input("Please input Money(>0):\n")
 logging.basicConfig(filename='gridbotlog.log', level=logging.DEBUG)
-
+trigger=2000
 import datetime
 g_upperid='0052'
 g_lowerid='00662'
 
 initmoney=0
-### 之後改成 money(init)=target_assset-uppershare*upperprice-lowershare*lowerprice
-target_assset=0
+
 class GridBot:
     upperid=g_upperid
     lowerid=g_lowerid
@@ -123,17 +119,6 @@ class GridBot:
         logging.debug('quantityLower:'+str(quantityLower))
         
         val=self.uppershareTarget*self.upperprice+self.lowerprice*self.lowershareTarget
-        if(DEBUG_SELLALOT):
-            if(quantityUpper<0 and quantityLower<0):
-                return
-            if(val<botLowerBound):                
-                return
-            if(val>botUpperBound):
-                return
-            if(abs(quantityUpper)==999):                
-                return
-            if(abs(quantityLower)==999):                
-                return
         
         code=self.upperid
         money=self.money
@@ -171,7 +156,7 @@ class GridBot:
                 logging.debug('quantity:'+str(abs(quantityUpper)))
                 logging.debug('price:'+str(stockAsk[code]))
                 
-            if(abs(quantityUpper)*stockPrice[code]>=2000):    
+            if(abs(quantityUpper)*stockPrice[code]>=trigger):    
                 contract = api.Contracts.Stocks[code]
                 cost=stockBid[code]*quantityUpper
                 if(quantityUpper>0):
@@ -214,7 +199,7 @@ class GridBot:
                     order_lot=shioaji.constant.TFTStockOrderLot.IntradayOdd, 
                     account=api.stock_account,
                 )
-            if(abs(quantityLower)*stockPrice[code]>=2000):    
+            if(abs(quantityLower)*stockPrice[code]>=trigger):    
                 contract = api.Contracts.Stocks[code]
                 cost=stockBid[code]*quantityLower
                 if(quantityLower>0):
@@ -285,11 +270,6 @@ class GridBot:
         lowerprice=lowerprice
         val=uppershareTarget*upperprice+lowerprice*lowershareTarget
 
-        if(DEBUG_SELLALOT):
-            if(val<botLowerBound):                
-                return
-            if(val>botUpperBound):
-                return
         self.uppershareTarget=uppershareTarget
         self.lowershareTarget=lowershareTarget
         self.upperprice=upperprice
@@ -365,6 +345,7 @@ try:
 except:
     initmoney=0
 totalcapital=initmoney+stockPrice[g_upperid]*bot1.uppershare+stockPrice[g_lowerid]*bot1.lowershare
+trigger=max(2000,totalcapital*0.005)
 print("totalcapital is "+str(totalcapital))
 ans=input("perform withdraw or deposit(y/n):\n")
 if(ans=='y'):
