@@ -35,10 +35,10 @@ class GridBot:
     money=0
 
     parameters={'BiasUpperLimit':2.2,\
-             'UpperLimitPosition':0.4,\
+             'UpperLimitPosition':0.1,\
              'BiasLowerLimit':0.9,\
              'LowerLimitPosition':0.9,\
-             'BiasPeriod':15}
+             'BiasPeriod':55}
     year=0
     month=0
     day=0
