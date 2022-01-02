@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 tw = yf.Ticker("0052.tw")
 TW_hist = tw.history(period="5y")
-us = yf.Ticker("00646.tw")
+us = yf.Ticker("00662.tw")
 US_hist = us.history(period="5y")
 #兩邊歷史資料長度不一樣,取交集
 idx = np.intersect1d(TW_hist.index, US_hist.index)
