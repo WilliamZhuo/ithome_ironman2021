@@ -65,7 +65,8 @@ UpperPosition=0.3
 BiasLower=0.5
 LowerPosition=0.7
 BiasPeriod=20
-
+#optimize BiasUpper
+#optimize BiasLower
 list_Grid_range=\
     [np.arange(1.0,2.1,0.1)\
      ,np.arange(UpperPosition,UpperPosition+0.1,0.1)\
@@ -82,6 +83,8 @@ BiasLower=retGrid[1]['BiasLowerLimit']
 LowerPosition=retGrid[1]['LowerLimitPosition']
 BiasPeriod=retGrid[1]['BiasPeriod']
 
+#optimize UpperPosition
+#optimize LowerPosition
 list_Grid_range=\
     [np.arange(BiasUpper,BiasUpper+0.1,0.1)\
      ,np.arange(0.1,0.5,0.1)\
@@ -97,6 +100,7 @@ BiasLower=retGrid[1]['BiasLowerLimit']
 LowerPosition=retGrid[1]['LowerLimitPosition']
 BiasPeriod=retGrid[1]['BiasPeriod']
 
+#optimize BiasPeriod
 list_Grid_range=\
     [np.arange(BiasUpper,BiasUpper+0.1,0.1)\
      ,np.arange(UpperPosition,UpperPosition+0.1,0.1)\
