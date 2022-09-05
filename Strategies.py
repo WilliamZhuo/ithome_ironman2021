@@ -11,6 +11,12 @@ from enum import Enum
 api=ShiojiLogin.api
 DF_FUTURE_SYMBOL=pd.read_csv('SYMBOL.csv')  
 '''
+#Strict
+G_spread=0.005
+G_tax=0.00   
+G_commission=0.000
+'''
+'''
 #For stock
 G_spread=0.0000176
 G_tax=0.0015   
@@ -22,11 +28,16 @@ G_spread=0
 G_tax=0.0015   
 G_commission=0.001425
 '''
-
+'''
 #小台
 G_spread=3.6280082234853065666948845084049e-4
 G_tax=4.4109538687741224039698584818967e-5
 G_commission=4.4109538687741224039698584818967e-5
+'''
+# Easy
+G_spread=0
+G_tax=0
+G_commission=0
 
 
 def maSignal(close,periodLong=30,periodShort=5):
@@ -39,26 +50,37 @@ def maSignal(close,periodLong=30,periodShort=5):
 
 
 def period_profit(openprice,buybegin=0,buyend=10):
+    #用來確認沒有出現開盤價為零的狀況
     if(openprice[buybegin]==0):
         print('div0')
-    return openprice[buyend]/openprice[buybegin]
-
-def backtest_signal(dayopen,signal,spread=G_spread,sizing=1.0):
+    #買進持有的報酬=最後一天的開盤價/第一天的開盤價
+    return (openprice[buyend]-openprice[buybegin])/openprice[buybegin]
+def backtest_signal(
+        dayopen,signal
+        ,spread=G_spread
+        ,sizing=1.0):
     buy=signal.astype(float)
+    ####################################
+    #把買賣訊號往後移一天,因為今天收盤的訊號下一天開盤才會買賣
+    ####################################
     position=buy.shift(1)
     position[0]=0.0
     global G_tax
     global G_commission
-    ret_series=pd.Series()    
-    for i in range(0,position.size,1):
+    ret_series=pd.Series()  
+    dayopen_l=dayopen.tolist()
+    position_l=position.tolist()    
+    #用position.size-1,因為最後一天+1是沒東西的, period_profit那行會有error,雖然還是可以跑
+    l=[]
+    for i in range(0,position.size-1,1):
         try:
-            temp=period_profit(dayopen,buybegin=i,buyend=i+1)
+            temp=1.0+period_profit(dayopen_l,buybegin=i,buyend=i+1)
             profit=temp-1.0
             cost=0
             #單邊交易成本,單位是百分比
             try:
                 #buy->sell or sell->buy
-                positionchange=abs(position[i]-position[i-1])
+                positionchange=abs(position_l[i]-position_l[i-1])
                 if(positionchange>0):
                     #spread=0.0000176  #價差,各商品不同,指數etf中最高的是006204 0.006
                     tax=G_tax       #交易稅
@@ -66,18 +88,19 @@ def backtest_signal(dayopen,signal,spread=G_spread,sizing=1.0):
                     cost=tax+commission+spread
                     cost=cost*positionchange
             except:
+                print('backtest_signal fail at calculate cost:',str(i))
                 pass           
             
-            ret=1.0+profit*position[i]*sizing-cost*sizing
+            ret=1.0+profit*position_l[i]*sizing-cost*sizing
             
-            thepair=pd.Series({i:ret})
-            ret_series=ret_series.append(thepair)     
-            
+            #faster than the origin one
+            l.append(ret)
         except:
+             print('backtest_signal fail at:',str(i))
              pass
-            #print('failat:',str(i))
-            
-    retStrategy=ret_series.to_numpy().prod()    
+    ret_series = pd.Series(l)
+    retStrategy=np.array(l).prod()    
+    #retStrategy=ret_series.to_numpy().prod()    
     #NOTE:最後一天的報酬率還沒出來，要等隔天的開盤價出來才會知道
     return retStrategy,ret_series
 
